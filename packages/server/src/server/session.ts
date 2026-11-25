@@ -5608,7 +5608,7 @@ export class Session {
       }
       const event = serializeAgentStreamEvent({
         type: "timeline",
-        provider,
+        provider: row.provider ?? provider,
         item: row.item,
         ...(row.turnId ? { turnId: row.turnId } : {}),
         timestamp: row.timestamp,
@@ -8775,7 +8775,8 @@ export class Session {
               : {}),
             entries: entries.map((entry) => {
               const payloadEntry = {
-                provider: agentPayload.provider,
+                // A row keeps the provider that wrote it; older rows have none.
+                provider: entry.provider ?? agentPayload.provider,
                 item: entry.item,
                 timestamp: entry.timestamp,
                 seqStart: entry.seqStart,

@@ -802,7 +802,11 @@ function validateAgentId(agentId: string, source: string): string {
 }
 
 function toTimelineEntry(event: Extract<AgentStreamEvent, { type: "timeline" }>): TimelineEntry {
-  return event.timestamp ? { item: event.item, timestamp: event.timestamp } : { item: event.item };
+  return {
+    item: event.item,
+    provider: event.provider,
+    ...(event.timestamp ? { timestamp: event.timestamp } : {}),
+  };
 }
 
 /** The live event that publishes a row committed from provider history. */
@@ -816,6 +820,7 @@ function historyEvent(provider: AgentProvider, commit: TimelineCommit): AgentStr
 }
 
 function projectImportedTimelineEntries(
+  provider: AgentProvider,
   entries: readonly ImportedTimelineEntry[],
 ): TimelineEntry[] {
   const projected: TimelineEntry[] = [];
@@ -823,9 +828,11 @@ function projectImportedTimelineEntries(
   const projection = new TimelineProjection();
   for (const entry of entries) {
     for (const item of projectAgentMessages(entry.item)) {
-      const timelineEntry: TimelineEntry = entry.timestamp
-        ? { item, timestamp: entry.timestamp }
-        : { item };
+      const timelineEntry: TimelineEntry = {
+        item,
+        provider,
+        ...(entry.timestamp ? { timestamp: entry.timestamp } : {}),
+      };
       projected.push(timelineEntry);
       projection.append({
         seq: projected.length,
@@ -1968,7 +1975,7 @@ export class AgentManager {
         }),
         { resolveDefaultModel: false },
       );
-      const importedEntries = projectImportedTimelineEntries(imported.timeline);
+      const importedEntries = projectImportedTimelineEntries(input.provider, imported.timeline);
       const initialTitle = resolveImportedAgentTitle(importedConfig, importedEntries);
 
       handedToRegistration = true;
@@ -3282,7 +3289,7 @@ export class AgentManager {
         const write = this.timeline
           .ingest(
             scope,
-            { item: event.item },
+            { item: event.item, provider: event.provider },
             { publish: (commit) => this.publishTimelineEvent(agent.id, event, commit) },
           )
           .then((result) => this.reportUnpublished(agent.id, result));
@@ -3346,7 +3353,7 @@ export class AgentManager {
     const event: AgentStreamEvent = { type: "timeline", item, provider: agent.provider };
     const result = await this.timeline.ingest(
       { agentId },
-      { item },
+      { item, provider: agent.provider },
       { publish: (commit) => this.publishTimelineEvent(agentId, event, commit) },
     );
     if (result.kind === "dropped") {
@@ -4852,7 +4859,7 @@ export class AgentManager {
         if (timelineInit.kind === "created") {
           await this.timeline.append(
             { agentId: managed.id },
-            projectImportedTimelineEntries(session.initialTimeline),
+            projectImportedTimelineEntries(managed.provider, session.initialTimeline),
           );
         }
         this.refreshSessionPersistence(managed);
@@ -5990,6 +5997,7 @@ export class AgentManager {
       { agentId },
       {
         item,
+        provider,
         ...(turnId !== undefined ? { turnId } : {}),
         ...(options?.providerMessageId ? { providerMessageId: options.providerMessageId } : {}),
       },
